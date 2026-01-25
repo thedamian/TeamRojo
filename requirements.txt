@@ -1,0 +1,6 @@
+azure-ai-evaluation[redteam]>=1.14.0
+hiddenlayer-sdk>=3.2.2
+pyrit>=0.8.1
+fastapi>=0.110.0
+uvicorn>=0.27.0
+websockets>=12.0
