@@ -1,22 +1,8 @@
 
 <div align="center">
+ 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥
 
-```text
-         (
-    .    )  )
-     )  (  (
-    (  (  )  )
-     )  )  (
-    (  (    )
-     )  )  (
-      (    )
-       )  (
-     __|__|__
-    |        |
-    |________|
-```
-
-# Team Fuego 🔥
+# Team Fuego 🔥 🔥 🔥
 
 **A LLM Red Team Testing App**
 
