@@ -1,6 +1,6 @@
 [project]
 name = "teamfuego"
-app = "backend.server:src/server"
+app = "backend.server:teamFuego"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
