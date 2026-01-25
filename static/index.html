@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Fuego - Red Teaming Agent</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        :root {
+            --primary-bg: #000;
+            --box-bg: #1a1a1a;
+            --text-color: #eee;
+            --accent-color: #ff4500;
+            --border-color: #333;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            background-color: var(--primary-bg);
+            color: var(--text-color);
+            font-family: 'Courier New', Courier, monospace; /* CLI aesthetic */
+            overflow: hidden;
+        }
+
+        /* ASCII Background */
+        #ascii-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            font-size: 12px;
+            line-height: 10px;
+            white-space: pre;
+            overflow: hidden;
+            background-color: #000;
+            display: block; /* changed from flex */
+            user-select: none;
+            opacity: 1.0; /* Full visibility for colors */
+            pointer-events: none;
+        }
+
+        /* Center Container */
+        #app-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 700px;
+            height: 80vh;
+            background-color: rgba(26, 26, 26, 0.95); /* Slight opacity to see fire behind */
+            border: 2px solid var(--accent-color);
+            border-radius: 8px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-shadow: 0 0 40px rgba(255, 69, 0, 0.4);
+            backdrop-filter: blur(5px);
+        }
+
+        h1 {
+            color: var(--accent-color);
+            text-align: center;
+            margin-top: 0;
+            text-shadow: 0 0 5px var(--accent-color);
+        }
+
+        p.description {
+            font-size: 0.9rem;
+            text-align: center;
+            margin-bottom: 20px;
+            color: #aaa;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            background-color: #222;
+            border: 1px solid var(--border-color);
+            color: #fff;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #ff6a00;
+        }
+
+        /* Results Area */
+        #results-area {
+            flex-grow: 1;
+            margin-top: 20px;
+            background-color: #000;
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 0.8rem;
+            border-radius: 4px;
+            display: none; /* Hidden initially */
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            border-bottom: 1px solid #222;
+            padding-bottom: 2px;
+        }
+        
+        .log-timestamp {
+            color: #888;
+            margin-right: 5px;
+        }
+
+        /* Post-test controls */
+        #post-test-controls {
+            display: none;
+            flex-direction: row;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        #post-test-controls button {
+            flex: 1;
+        }
+        
+        .secondary-btn {
+            background-color: #444;
+        }
+        .secondary-btn:hover {
+            background-color: #666;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="ascii-bg"></div>
+
+    <div id="app-container">
+        <h1>Team Fuego</h1>
+        <p class="description">
+            This is Team Fuego. A Red Teaming Agent that will test any OpenAI compatible endpoint for Prompt Injection issues.
+        </p>
+
+        <div id="input-section">
+            <div class="form-group">
+                <label for="base-url">Base URL</label>
+                <input type="text" id="base-url" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1">
+            </div>
+            <div class="form-group">
+                <label for="model-name">Model Name</label>
+                <input type="text" id="model-name" value="gpt-5-mini" placeholder="gpt-5-mini">
+            </div>
+            <div class="form-group">
+                <label for="api-key">API Key</label>
+                <input type="password" id="api-key" placeholder="sk-..." autocomplete="off">
+            </div>
+            <button id="start-btn">Red Team this!</button>
+        </div>
+
+        <div id="results-area"></div>
+
+        <div id="post-test-controls">
+            <button id="test-another-btn" class="secondary-btn">Test Another Endpoint</button>
+            <button id="export-btn">Export Report</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Fullscreen Colored ASCII Fire Animation ---
+        const asciiContainer = document.getElementById('ascii-bg');
+        let width, height;
+        let firePixels = [];
+        // Character ramp from dark to light
+        const charMap = [" ", ".", ":", "-", "=", "+", "*", "#", "%", "@"];
+        // Color palette corresponding to intensity (Dark Red -> Red -> Orange -> Yellow -> White)
+        const colors = [
+            "#070000", "#190000", "#2b0000", "#3e0000", "#580000", 
+            "#7c0000", "#a00000", "#c83200", "#ff6e00", "#ffbf00", "#ffffaa"
+        ];
+
+        let isAnimatingIntensely = false;
+
+        function resizeFire() {
+            // Calculate grid size based on font size. 
+            // Approx char width ~7px, height ~10px at font-size 12px
+            width = Math.ceil(window.innerWidth / 7);
+            height = Math.ceil(window.innerHeight / 10);
+            
+            firePixels = new Array(width * height).fill(0);
+        }
+
+        window.addEventListener('resize', resizeFire);
+        resizeFire();
+
+        function updateFire() {
+            // Seed the bottom row
+            for (let i = 0; i < width; i++) {
+                const index = (height - 1) * width + i;
+                // Random intensity for bottom row
+                // Higher intensity when "Red Teaming" is active
+                const maxIntensity = isAnimatingIntensely ? colors.length * 25 : colors.length * 10;
+                const r = Math.floor(Math.random() * maxIntensity);
+                firePixels[index] = r > 255 ? 255 : r; // Clamp logic handled below actually
+            }
+
+            // Propagate upwards
+            for (let y = 0; y < height - 1; y++) {
+                for (let x = 0; x < width; x++) {
+                    const index = y * width + x;
+                    const belowIndex = (y + 1) * width + x;
+                    
+                    // Fire propagation: decay as it goes up
+                    const decay = Math.floor(Math.random() * 3); // 0, 1, or 2
+                    const belowVal = firePixels[belowIndex];
+                    let newVal = belowVal - decay;
+                    if (newVal < 0) newVal = 0;
+
+                    // Wind effect
+                    const wind = Math.floor(Math.random() * 3) - 1; // -1, 0, 1
+                    let destIndex = index + wind;
+                    
+                    // Boundary checks
+                    if (destIndex >= y * width && destIndex < (y + 1) * width) {
+                         firePixels[destIndex] = newVal;
+                    } else {
+                        firePixels[index] = newVal;
+                    }
+                }
+            }
+        }
+
+        function renderFire() {
+            let html = "";
+            
+            // Optimization: Build a large string of spans? 
+            // Direct DOM manipulation of thousands of spans is slow.
+            // Better approach for full screen: Canvas or simply colored text strings if simple.
+            // Since request is "ascii for fire", we will use text with inline styles or classes.
+            // To be performant enough for JS, we'll try to group colors or just output text 
+            // but we need colors. 
+            // Let's use a simplified approach: Render rows.
+            
+            // To make it performant: just text content, but that's one color.
+            // "ANSI" usually implies colors. 
+            // We will use a canvas to render the 'ASCII' to act like a terminal buffer 
+            // OR simply accept that creating 5000 <span> elements every 50ms will kill the CPU.
+            
+            // Strategy: Use a string builder with coloring logic only where strictly needed 
+            // OR use a pre-defined set of spans.
+            // ACTUALLY: For full screen background with "ansi" feel, standard text rendering 
+            // is best done via Canvas for performance, drawing text characters.
+            
+            // Canvas Implementation for Performance
+            const canvas = document.createElement('canvas');
+            // Check if we already have a canvas, if not replace the div content
+            if (!asciiContainer.querySelector('canvas')) {
+                asciiContainer.innerHTML = '';
+                asciiContainer.appendChild(canvas);
+            } else {
+                // Reuse canvas
+            }
+            
+            const cvs = asciiContainer.querySelector('canvas');
+            const ctx = cvs.getContext('2d');
+            
+            // Resize canvas to match window
+            if (cvs.width !== window.innerWidth || cvs.height !== window.innerHeight) {
+                cvs.width = window.innerWidth;
+                cvs.height = window.innerHeight;
+            }
+
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, cvs.width, cvs.height);
+            ctx.font = '12px Courier New';
+            ctx.textBaseline = 'top';
+
+            const charW = 7;
+            const charH = 10;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const index = y * width + x;
+                    const val = firePixels[index]; // 0 to ~255 range effectively
+                    
+                    if (val <= 0) continue;
+
+                    // Map intensity to Color
+                    // Normalize val (assuming max around 30-50 for top, higher for bottom)
+                    // We'll map 0-40 range roughly to our 11 colors.
+                    let colorIdx = Math.floor(val / 3.5);
+                    if (colorIdx >= colors.length) colorIdx = colors.length - 1;
+                    if (colorIdx < 0) colorIdx = 0;
+
+                    // Map intensity to Char
+                    let charIdx = Math.floor(val / 4);
+                    if (charIdx >= charMap.length) charIdx = charMap.length - 1;
+                    
+                    ctx.fillStyle = colors[colorIdx];
+                    ctx.fillText(charMap[charIdx], x * charW, y * charH);
+                }
+            }
+        }
+
+        let animationInterval;
+
+        function startAnimation() {
+            if (animationInterval) return;
+            isAnimatingIntensely = true; // Start intense immediately
+            resizeFire(); // Ensure size is correct
+            animationInterval = setInterval(() => {
+                updateFire();
+                renderFire();
+            }, 50);
+        }
+
+        function stopAnimation() {
+            clearInterval(animationInterval);
+            animationInterval = null;
+            // Clear canvas
+            const cvs = asciiContainer.querySelector('canvas');
+            if (cvs) {
+                const ctx = cvs.getContext('2d');
+                ctx.clearRect(0, 0, cvs.width, cvs.height);
+            }
+        }
+
+        // --- Application Logic ---
+        const startBtn = document.getElementById('start-btn');
+        const inputSection = document.getElementById('input-section');
+        const resultsArea = document.getElementById('results-area');
+        const postTestControls = document.getElementById('post-test-controls');
+        const testAnotherBtn = document.getElementById('test-another-btn');
+        const exportBtn = document.getElementById('export-btn');
+        const baseUrlInput = document.getElementById('base-url');
+        const modelNameInput = document.getElementById('model-name');
+        const apiKeyInput = document.getElementById('api-key');
+
+        let logs = []; // Store logs for export
+
+        startBtn.addEventListener('click', () => {
+            const baseUrl = baseUrlInput.value;
+            const modelName = modelNameInput.value;
+            const apiKey = apiKeyInput.value;
+
+            if (!baseUrl || !apiKey || !modelName) {
+                alert("Please provide Base URL, Model Name, and API Key.");
+                return;
+            }
+
+            // UI Transition
+            inputSection.style.display = 'none';
+            resultsArea.style.display = 'block';
+            resultsArea.innerHTML = ''; // clear previous
+            logs = [];
+            
+            // Start Animation
+            startAnimation();
+
+            // Connect to WebSocket
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            const ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
+
+            ws.onopen = () => {
+                logMessage("System", "Connected to Team Fuego Backend.");
+                // Send config to start test
+                ws.send(JSON.stringify({
+                    base_url: baseUrl,
+                    api_key: apiKey,
+                    model: modelName
+                }));
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'log') {
+                    logMessage("Agent", data.message);
+                } else if (data.type === 'complete') {
+                    stopAnimation();
+                    
+                    // Summary Handling
+                    const summary = data.summary || { passed: 0, failed: 0 };
+                    logMessage("System", "------------------------------------------------");
+                    logMessage("System", `Tests Passed: ${summary.passed}`);
+                    logMessage("System", `Tests Failed: ${summary.failed}`);
+                    
+                    if (summary.failed === 0) {
+                        logMessage("System", "All tests from HiddenLayer and PyRit have passed successfully");
+                    }
+
+                    logMessage("System", "Red Teaming Complete.");
+                    postTestControls.style.display = 'flex';
+                    ws.close();
+                } else if (data.type === 'error') {
+                    stopAnimation();
+                    logMessage("Error", data.message);
+                    postTestControls.style.display = 'flex';
+                    ws.close();
+                }
+            };
+
+            ws.onerror = (error) => {
+                stopAnimation();
+                logMessage("Error", "WebSocket Connection Failed.");
+                postTestControls.style.display = 'flex';
+            };
+        });
+
+        function logMessage(sender, message) {
+            const now = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = 'log-entry';
+            div.innerHTML = `<span class="log-timestamp">[${now}]</span> <strong>${sender}:</strong> ${message}`;
+            resultsArea.appendChild(div);
+            resultsArea.scrollTop = resultsArea.scrollHeight;
+            
+            // Store plain text for PDF
+            logs.push(`[${now}] ${sender}: ${message}`);
+        }
+
+        testAnotherBtn.addEventListener('click', () => {
+            inputSection.style.display = 'block';
+            resultsArea.style.display = 'none';
+            postTestControls.style.display = 'none';
+            logs = [];
+            apiKeyInput.value = ''; // Security best practice
+        });
+
+        exportBtn.addEventListener('click', () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            const baseUrl = baseUrlInput.value;
+            const modelName = modelNameInput.value;
+            
+            doc.setFontSize(20);
+            doc.text("Team Fuego - Red Team Report", 10, 20);
+            
+            doc.setFontSize(12);
+            doc.text(`Target Endpoint: ${baseUrl}`, 10, 30);
+            doc.text(`Target Model: ${modelName}`, 10, 37);
+            doc.text(`Date: ${new Date().toLocaleString()}`, 10, 44);
+
+            // Check for failures in logs before drawing the rest
+            let hasFailures = false;
+            logs.forEach(log => {
+                if (log.toLowerCase().includes("failed: ") && !log.toLowerCase().includes("failed: 0")) {
+                    hasFailures = true;
+                }
+            });
+
+            let y = 50;
+            if (!hasFailures) {
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(18);
+                doc.setTextColor(0, 150, 0); // Dark Green
+                doc.text("All tests have passed successfully", 10, y + 5);
+                y += 15;
+            }
+
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(12);
+            doc.setTextColor(0, 0, 0); // Back to black
+            doc.text("------------------------------------------------", 10, y);
+            y += 10;
+
+            doc.setFontSize(10);
+            logs.forEach(log => {
+                if (y > 270) { // Page break
+                    doc.addPage();
+                    y = 20;
+                }
+                const splitText = doc.splitTextToSize(log, 180);
+                doc.text(splitText, 10, y);
+                y += (splitText.length * 7);
+            });
+
+            doc.save("TeamFuego_Report.pdf");
+        });
+
+    </script>
+</body>
+</html>
