@@ -165,6 +165,33 @@
             background-color: #666;
         }
 
+        .checkbox-group {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            margin-bottom: 0;
+            cursor: pointer;
+        }
+
+        .conditional-inputs {
+            margin-left: 25px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .conditional-inputs.show {
+            display: block;
+        }
+
     </style>
 </head>
 <body>
@@ -190,6 +217,27 @@
                 <label for="api-key">API Key</label>
                 <input type="password" id="api-key" placeholder="sk-..." autocomplete="off">
             </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="test-hiddenlayer" name="test-hiddenlayer">
+                <label for="test-hiddenlayer">Test with HiddenLayer</label>
+            </div>
+            <div id="hiddenlayer-inputs" class="conditional-inputs">
+                <div class="form-group">
+                    <label for="hl-api-key">HiddenLayer API Key</label>
+                    <input type="password" id="hl-api-key" placeholder="hl-..." autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label for="hl-sensor-id">HiddenLayer Sensor ID</label>
+                    <input type="text" id="hl-sensor-id" placeholder="sensor-...">
+                </div>
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="test-pyrit" name="test-pyrit" checked>
+                <label for="test-pyrit">Test with PyRIT</label>
+            </div>
+
             <button id="start-btn">Red Team this!</button>
         </div>
 
@@ -370,17 +418,43 @@
         const baseUrlInput = document.getElementById('base-url');
         const modelNameInput = document.getElementById('model-name');
         const apiKeyInput = document.getElementById('api-key');
+        const testHiddenLayerCheckbox = document.getElementById('test-hiddenlayer');
+        const hiddenLayerInputs = document.getElementById('hiddenlayer-inputs');
+        const hlApiKeyInput = document.getElementById('hl-api-key');
+        const hlSensorIdInput = document.getElementById('hl-sensor-id');
+        const testPyritCheckbox = document.getElementById('test-pyrit');
 
         let logs = []; // Store logs for export
+
+        // Toggle HiddenLayer inputs visibility
+        testHiddenLayerCheckbox.addEventListener('change', () => {
+            if (testHiddenLayerCheckbox.checked) {
+                hiddenLayerInputs.classList.add('show');
+            } else {
+                hiddenLayerInputs.classList.remove('show');
+            }
+        });
 
         startBtn.addEventListener('click', () => {
             const baseUrl = baseUrlInput.value;
             const modelName = modelNameInput.value;
             const apiKey = apiKeyInput.value;
+            const testHiddenLayer = testHiddenLayerCheckbox.checked;
+            const testPyrit = testPyritCheckbox.checked;
 
             if (!baseUrl || !apiKey || !modelName) {
                 alert("Please provide Base URL, Model Name, and API Key.");
                 return;
+            }
+
+            // Validate HiddenLayer inputs if checkbox is checked
+            if (testHiddenLayer) {
+                const hlApiKey = hlApiKeyInput.value;
+                const hlSensorId = hlSensorIdInput.value;
+                if (!hlApiKey || !hlSensorId) {
+                    alert("Please provide HiddenLayer API Key and Sensor ID.");
+                    return;
+                }
             }
 
             // UI Transition
@@ -399,11 +473,21 @@
             ws.onopen = () => {
                 logMessage("System", "Connected to Team Fuego Backend.");
                 // Send config to start test
-                ws.send(JSON.stringify({
+                const config = {
                     base_url: baseUrl,
                     api_key: apiKey,
-                    model: modelName
-                }));
+                    model: modelName,
+                    test_hiddenlayer: testHiddenLayer,
+                    test_pyrit: testPyrit
+                };
+
+                // Add HiddenLayer credentials if testing is enabled
+                if (testHiddenLayer) {
+                    config.HL_API_KEY = hlApiKeyInput.value;
+                    config.HL_Sensor_ID = hlSensorIdInput.value;
+                }
+
+                ws.send(JSON.stringify(config));
             };
 
             ws.onmessage = (event) => {
