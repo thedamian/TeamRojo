@@ -224,12 +224,12 @@
             </div>
             <div id="hiddenlayer-inputs" class="conditional-inputs">
                 <div class="form-group">
-                    <label for="hl-api-key">HiddenLayer API Key</label>
-                    <input type="password" id="hl-api-key" placeholder="hl-..." autocomplete="off">
+                    <label for="hl-client-id">HiddenLayer Client ID</label>
+                    <input type="text" id="hl-client-id" placeholder="your-client-id" autocomplete="off">
                 </div>
                 <div class="form-group">
-                    <label for="hl-sensor-id">HiddenLayer Sensor ID</label>
-                    <input type="text" id="hl-sensor-id" placeholder="sensor-...">
+                    <label for="hl-client-secret">HiddenLayer Client Secret</label>
+                    <input type="password" id="hl-client-secret" placeholder="your-client-secret" autocomplete="off">
                 </div>
             </div>
 
@@ -420,8 +420,8 @@
         const apiKeyInput = document.getElementById('api-key');
         const testHiddenLayerCheckbox = document.getElementById('test-hiddenlayer');
         const hiddenLayerInputs = document.getElementById('hiddenlayer-inputs');
-        const hlApiKeyInput = document.getElementById('hl-api-key');
-        const hlSensorIdInput = document.getElementById('hl-sensor-id');
+        const hlClientIdInput = document.getElementById('hl-client-id');
+        const hlClientSecretInput = document.getElementById('hl-client-secret');
         const testPyritCheckbox = document.getElementById('test-pyrit');
 
         let logs = []; // Store logs for export
@@ -449,10 +449,10 @@
 
             // Validate HiddenLayer inputs if checkbox is checked
             if (testHiddenLayer) {
-                const hlApiKey = hlApiKeyInput.value;
-                const hlSensorId = hlSensorIdInput.value;
-                if (!hlApiKey || !hlSensorId) {
-                    alert("Please provide HiddenLayer API Key and Sensor ID.");
+                const hlClientId = hlClientIdInput.value;
+                const hlClientSecret = hlClientSecretInput.value;
+                if (!hlClientId || !hlClientSecret) {
+                    alert("Please provide HiddenLayer Client ID and Client Secret.");
                     return;
                 }
             }
@@ -483,8 +483,8 @@
 
                 // Add HiddenLayer credentials if testing is enabled
                 if (testHiddenLayer) {
-                    config.HL_API_KEY = hlApiKeyInput.value;
-                    config.HL_Sensor_ID = hlSensorIdInput.value;
+                    config.HIDDENLAYER_CLIENT_ID = hlClientIdInput.value;
+                    config.HIDDENLAYER_CLIENT_SECRET = hlClientSecretInput.value;
                 }
 
                 ws.send(JSON.stringify(config));
