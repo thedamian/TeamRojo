@@ -12,7 +12,7 @@ from openai import AzureOpenAI
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("TeamFuego")
+logger = logging.getLogger("TeamRojo")
 
 
 app = FastAPI()
