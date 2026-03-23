@@ -2,7 +2,7 @@
 <div align="center">
  🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥 🔥
 
-# Team Fuego 🔥 🔥 🔥
+# Team ROJO 🔥 🔥 🔥
 
 **A LLM Red Team Testing App**
 
@@ -20,9 +20,9 @@
 
 ---
 
-## 🧐 What is Team Fuego?
+## 🧐 What is Team Rojo?
 
-**Team Fuego** is a hot 🔥 new interactive Red Teaming agent designed to test any OpenAI-compatible endpoint. It wraps powerful security tools in a sleek, retro-CLI interface complete with real-time animations.
+**Team Rojo** is a hot 🔥 new interactive Red Teaming agent designed to test any OpenAI-compatible endpoint. It wraps powerful security tools in a sleek, retro-CLI interface complete with real-time animations.
 
 It combines the power of **HiddenLayer** and **PyRit** to simulate adversarial attacks against your LLM applications, ensuring they are robust enough to handle the heat!
 
@@ -48,8 +48,8 @@ It combines the power of **HiddenLayer** and **PyRit** to simulate adversarial a
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/team-fuego.git
-    cd team-fuego
+    git clone https://github.com/your-username/team-rojo.git
+    cd team-rojo
     ```
 
 2.  **Install dependencies:**
@@ -66,7 +66,7 @@ It combines the power of **HiddenLayer** and **PyRit** to simulate adversarial a
 Ignite the engine! 🏎️💨
 
 ```bash
-uv run uvicorn teamFuego:app --reload
+uv run uvicorn teamRojo:app --reload
 ```
 
 Then open your browser and head to: **`http://127.0.0.1:8000`**
@@ -100,5 +100,5 @@ Then open your browser and head to: **`http://127.0.0.1:8000`**
 *This tool is for educational and authorized security testing purposes only. Always ensure you have permission to test the target endpoints.*
 
 <div align="center">
-  <sub>Made with ❤️ and a lot of ☕ by Team Fuego</sub>
+  <sub>Made with ❤️ and a lot of ☕ by Team Rojo</sub>
 </div>
