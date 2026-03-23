@@ -1,0 +1,118 @@
+name: AI Red Team Endpoint Tests
+run-name: AI Red Team Security Tests 🛡️
+
+on:
+  workflow_dispatch:
+  # Optionally trigger after deployment workflows:
+  # workflow_run:
+  #   workflows: ["Build & Deploy Web App"]
+  #   types: [completed]
+
+permissions:
+  contents: read
+
+env:
+  AZURE_OPENAI_LLM_MODEL: ${{ secrets.AZURE_OPENAI_LLM_MODEL }}
+  AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+  AZURE_OPENAI_ACCESS_TOKEN_URL: ${{ secrets.AZURE_OPENAI_ACCESS_TOKEN_URL }}
+  AZURE_OPENAI_TENANT: ${{ secrets.AZURE_OPENAI_TENANT }}
+  AZURE_OPENAI_CLIENT_ID: ${{ secrets.AZURE_OPENAI_CLIENT_ID }}
+  AZURE_OPENAI_CLIENT_SECRET: ${{ secrets.AZURE_OPENAI_CLIENT_SECRET }}
+  AZURE_OPENAI_SCOPE: ${{ secrets.AZURE_OPENAI_SCOPE }}
+
+jobs:
+  ai-red-team:
+    name: AI Red Team Security Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: tests/ai_redteam
+        run: uv sync
+
+      - name: Run AI Red Team Tests
+        working-directory: tests/ai_redteam
+        run: |
+          uv run python test_ai_redteam.py 2>&1 | tee test_output.log
+
+          # Capture the exit code from the script (via PIPESTATUS)
+          EXIT_CODE=${PIPESTATUS[0]}
+
+          echo "test_exit_code=$EXIT_CODE" >> $GITHUB_ENV
+
+      - name: Upload Red Team Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-redteam-report
+          path: |
+            tests/ai_redteam/redteam_report.json
+            tests/ai_redteam/test_output.log
+          retention-days: 30
+
+      - name: Report Summary
+        if: always()
+        working-directory: tests/ai_redteam
+        run: |
+          echo "## 🛡️ AI Red Team Test Results" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f redteam_report.json ]; then
+            TOTAL=$(jq '.total' redteam_report.json)
+            PASSED=$(jq '.passed' redteam_report.json)
+            FAILED=$(jq '.failed' redteam_report.json)
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Total  | $TOTAL |" >> $GITHUB_STEP_SUMMARY
+            echo "| ✅ Passed | $PASSED |" >> $GITHUB_STEP_SUMMARY
+            echo "| ❌ Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            echo "### Category Breakdown" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            for category in $(jq -r '.categories | keys[]' redteam_report.json); do
+              CAT_PASSED=$(jq -r ".categories.\"$category\".passed" redteam_report.json)
+              CAT_TOTAL=$(jq -r ".categories.\"$category\".total" redteam_report.json)
+              CAT_FAILED=$(jq -r ".categories.\"$category\".failed" redteam_report.json)
+
+              if [ "$CAT_FAILED" -eq 0 ]; then
+                ICON="✅"
+              else
+                ICON="❌"
+              fi
+
+              echo "- $ICON **${category}**: ${CAT_PASSED}/${CAT_TOTAL} passed" >> $GITHUB_STEP_SUMMARY
+            done
+
+            if [ "$FAILED" -gt 0 ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "> ⚠️ **$FAILED security test(s) FAILED** — review before deployment!" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "> ✅ All security tests passed." >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "⚠️ No report file found. Tests may have failed to initialize." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Fail if tests failed
+        if: env.test_exit_code != '0'
+        run: |
+          echo "❌ AI Red Team tests failed with exit code ${{ env.test_exit_code }}"
+          exit ${{ env.test_exit_code }}

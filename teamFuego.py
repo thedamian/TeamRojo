@@ -7,7 +7,7 @@ from pyexpat import model
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from openai import AzureOpenAI
+
 
 
 # Configure logging
@@ -25,7 +25,13 @@ async def read_index():
     return FileResponse("static/index.html")
 
 async def websocket_send( websocket: WebSocket,message: str) -> None:
-    await websocket.send_json({"type": "error", "message": message})
+    try:
+        await websocket.send_json({"type": "log", "message": message})
+    except RuntimeError:
+        # Connection already closed
+        pass
+    except Exception as e:
+        logger.error(f"Error sending websocket message: {e}")
 
 def normalize_base_url(base_url: str) -> str:
     """
@@ -37,7 +43,7 @@ def normalize_base_url(base_url: str) -> str:
     base_url = base_url.strip()
     
     # Azure OpenAI
-    if ".openai.azure.com/" in base_url:
+    if ".openai.azure.com" in base_url:
         # Cut off everything after the first / and replace with "models"
         parts = base_url.split("/")
         # Find the domain part
@@ -45,7 +51,9 @@ def normalize_base_url(base_url: str) -> str:
             if ".openai.azure.com" in part:
                 # Reconstruct: protocol + domain + /models
                 protocol = parts[0] if parts[0].startswith("http") else "https:"
-                return f"{protocol}//{part}/models"
+                newUrl = f"{protocol}//{part}/models"
+                print("Host is: ", newUrl)
+                return newUrl
     
     # Google Gemini
     if "googleapis.com" in base_url:
@@ -61,7 +69,7 @@ def normalize_base_url(base_url: str) -> str:
 
 # HiddenLayer Tests
 
-async def run_red_team_evaluation(websocket: WebSocket,hiddenlayer_client_id:str, hiddenlayer_client_secret:str,model_name:str, passed, failed) -> tuple: # returns a tuple of passed,failed 
+async def run_red_team_evaluation(websocket: WebSocket,hiddenlayer_client_id:str, hiddenlayer_client_secret:str, base_url:str, api_key:str,model_name:str, passed, failed) -> tuple: # returns a tuple of passed,failed 
     """Execute HiddenLayer Red Team evaluation against Azure OpenAI via APIM"""
 
     from hiddenlayer_evaluations_sdk import HiddenLayerEvaluationsAsyncClient
@@ -108,22 +116,22 @@ async def run_red_team_evaluation(websocket: WebSocket,hiddenlayer_client_id:str
     OBJECTIVE_IDS = None  # Test all objectives
     
 
-    websocket_send(websocket,f"\n⚡ Performance:")
-    websocket_send(websocket,f"   • {PARALLEL_TECHNIQUES} parallel attack techniques")
-    websocket_send(websocket,f"   • {SESSIONS_PER_TECHNIQUE} sessions per technique")
-    websocket_send(websocket,f"   • ~{43 * SESSIONS_PER_TECHNIQUE} total attack sessions")
-    websocket_send(websocket,f"   • {MAX_TURNS} conversation turns per session")
+    await websocket_send(websocket,f"\n⚡ Performance:")
+    await websocket_send(websocket,f"   • {PARALLEL_TECHNIQUES} parallel attack techniques")
+    await websocket_send(websocket,f"   • {SESSIONS_PER_TECHNIQUE} sessions per technique")
+    await websocket_send(websocket,f"   • ~{43 * SESSIONS_PER_TECHNIQUE} total attack sessions")
+    await websocket_send(websocket,f"   • {MAX_TURNS} conversation turns per session")
     
     # if HIDDENLAYER_PROJECT_ID:
-    #     websocket_send(websocket,f"\n📊 Project ID: {HIDDENLAYER_PROJECT_ID}")
+    #     await websocket_send(websocket,f"\n📊 Project ID: {HIDDENLAYER_PROJECT_ID}")
     
-    websocket_send(websocket,f"\n🕐 Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    websocket_send(websocket,f"================================================\n")
+    await websocket_send(websocket,f"\n🕐 Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    await websocket_send(websocket,f"================================================\n")
     
     try:
         # SSL bypass is already configured globally in cell 2 if SSL_VERIFY=false
         if not SSL_VERIFY:
-            websocket_send(websocket,"⚠️  SSL verification disabled for corporate proxy/VPN\n")
+            await websocket_send(websocket,"⚠️  SSL verification disabled for corporate proxy/VPN\n")
             failed += 1
         
         # Initialize HiddenLayer client
@@ -132,7 +140,7 @@ async def run_red_team_evaluation(websocket: WebSocket,hiddenlayer_client_id:str
             hiddenlayer_client_secret=hiddenlayer_client_secret,
         ) as client:
             
-            websocket_send(websocket,"Creating evaluation session...")
+            await websocket_send(websocket,"Creating evaluation session...")
             
             # Session parameters
             session_params = {
@@ -155,33 +163,46 @@ async def run_red_team_evaluation(websocket: WebSocket,hiddenlayer_client_id:str
             # Start session
             session = await client.start_session(**session_params)
             
-            websocket_send(websocket,f"✅ Session created: {session.workflow_id}")
-            websocket_send(websocket,f"\n🎯 Running comprehensive security evaluation...")
-            websocket_send(websocket,f" Working.... please wait.\n")
+            await websocket_send(websocket,f"✅ Session created: {session.workflow_id}")
+            await websocket_send(websocket,f"\n🎯 Running comprehensive security evaluation...")
+            await websocket_send(websocket,f" Working.... please wait.... This can take several minutes. Can I get you a Coffee? ☕\n")
             
+            SystemEworking = True
+
+
+
             # Run the evaluation
             start_time = datetime.now()
-            results = await session.run_with_callback_parallel(handler=azure_openai_handler)
+
+            # Define extras to pass to the handler
+            extras = {
+                "websocket": websocket,
+                "Azure_OpenAI_Endpoint": base_url,
+                "Azure_OpenAI_Model": model_name,
+                "Azure_OpenAI_KEY": api_key,
+            }
+
+            results = await session.run_with_callback_parallel(handler=azure_openai_handler, extras=extras)
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             
-            websocket_send(websocket,f"\n\n================================================")
-            websocket_send(websocket,f"✅ EVALUATION COMPLETE - COMPREHENSIVE SECURITY ANALYSIS")
-            websocket_send(websocket,f"================================================")
-            websocket_send(websocket,f"⏱️  Duration: {duration:.1f} seconds ({duration/60:.1f} minutes)")
-            websocket_send(websocket,f"🆔 Session ID: {session.workflow_id}")
-            websocket_send(websocket,f"\n📊 Coverage Summary:")
-            websocket_send(websocket,f"   • {43 * SESSIONS_PER_TECHNIQUE} attack sessions executed")
-            websocket_send(websocket,f"   • {MAX_TURNS} conversation turns per session")
+            await websocket_send(websocket,f"\n\n================================================")
+            await websocket_send(websocket,f"✅ EVALUATION COMPLETE - COMPREHENSIVE SECURITY ANALYSIS")
+            await websocket_send(websocket,f"================================================")
+            await websocket_send(websocket,f"⏱️  Duration: {duration:.1f} seconds ({duration/60:.1f} minutes)")
+            await websocket_send(websocket,f"🆔 Session ID: {session.workflow_id}")
+            await websocket_send(websocket,f"\n📊 Coverage Summary:")
+            await websocket_send(websocket,f"   • {43 * SESSIONS_PER_TECHNIQUE} attack sessions executed")
+            await websocket_send(websocket,f"   • {MAX_TURNS} conversation turns per session")
             
             if results and 'evaluations' in results:
                 total_prompts = sum(len(eval.get('messages', [])) for eval in results['evaluations'])
                 passed += total_prompts
-                websocket_send(websocket,f"   • {total_prompts} total interactions analyzed")
+                await websocket_send(websocket,f"   • {total_prompts} total interactions analyzed")
             
-            websocket_send(websocket,f"\n🎉 View Detailed Results:")
-            websocket_send(websocket,f"   🔗 HiddenLayer Console: https://console.hiddenlayer.ai/")
-            websocket_send(websocket,f"   🆔 Session ID: {session.workflow_id}")
+            await websocket_send(websocket,f"\n🎉 View Detailed Results:")
+            await websocket_send(websocket,f"   🔗 HiddenLayer Console: https://console.hiddenlayer.ai/")
+            await websocket_send(websocket,f"   🆔 Session ID: {session.workflow_id}")
             
             return {
                 "success": True,
@@ -193,73 +214,88 @@ async def run_red_team_evaluation(websocket: WebSocket,hiddenlayer_client_id:str
             }
             
     except Exception as e:
-        websocket_send(websocket,f"\n❌ ERROR: {e}")
-        websocket_send(websocket,f"\n🔍 Troubleshooting checklist:")
-        websocket_send(websocket,"   1. HiddenLayer credentials are correct in .env file")
-        websocket_send(websocket,"   2. Azure OpenAI endpoint is accessible via APIM")
-        websocket_send(websocket,"   3. Model deployment name matches AZURE_OPENAI_MODEL")
-        websocket_send(websocket,"   4. API key has proper permissions")
-        websocket_send(websocket,"   5. APIM subscription is active")
+        print("Error!",e)
+        await websocket_send(websocket,f"\n❌ ERROR: {e}")
+        await websocket_send(websocket,f"\n🔍 Troubleshooting checklist:")
+        await websocket_send(websocket,"   1. HiddenLayer credentials are correct in .env file")
+        await websocket_send(websocket,"   2. Azure OpenAI endpoint is accessible via APIM")
+        await websocket_send(websocket,"   3. Model deployment name matches AZURE_OPENAI_MODEL")
+        await websocket_send(websocket,"   4. API key has proper permissions")
+        await websocket_send(websocket,"   5. APIM subscription is active")
         return {
             "success": False,
-            "error": str(e)
+            "error": str(e),
+            "passed": passed,
+            "failed": failed
         }
 
 
-async def test_azure_openai_connection(websocket: WebSocket, Azure_OpenAI_Endpoint: str, Azure_OpenAI_Model: str, Azure_OpenAI_KEY: str, Azure_OpenAI_API_VERSION: str = "2025-06-01") -> bool:
+async def test_azure_openai_connection(websocket: WebSocket, base_url: str, Azure_OpenAI_Model: str, api_key: str, Azure_OpenAI_API_VERSION: str = "2025-04-01-preview") -> bool:
     """Test connection to Azure OpenAI via APIM"""
-    
-    websocket_send(websocket,f"\n================================================")
-    websocket_send(websocket,"Testing Azure OpenAI Connection via APIM")
-    websocket_send(websocket,f"================================================")
-    websocket_send(websocket,f"Endpoint: {Azure_OpenAI_Endpoint}")
-    websocket_send(websocket,f"Model: {Azure_OpenAI_Model}")
+    print("test_azure_openai_connection starting")
+    await websocket_send(websocket,f"\n================================================")
+    await websocket_send(websocket,"Testing Azure OpenAI Connection via APIM")
+    await websocket_send(websocket,f"================================================")
+    await websocket_send(websocket,f"Endpoint: {base_url}")
+    await websocket_send(websocket,f"Model: {Azure_OpenAI_Model}")
     
     try:
         # Initialize Azure OpenAI client with proper configuration
-        client = AzureOpenAI(
-            api_key=Azure_OpenAI_KEY,
-            api_version=Azure_OpenAI_API_VERSION,
-            azure_endpoint=Azure_OpenAI_Endpoint
+
+        from openai import AsyncOpenAI
+
+        # Use OpenAI client directly instead of PyRIT's OpenAIChatTarget
+        # since PyRIT's target adds Azure-specific parameters
+        client = AsyncOpenAI(
+            base_url=base_url,
+            api_key=api_key
         )
+
+
+        # client = AzureOpenAI(
+        #     api_key=api_key,
+        #     api_version=Azure_OpenAI_API_VERSION,
+        #     azure_endpoint=base_url
+        # )
         
-        websocket_send(websocket,"\nSending test request...")
+        await websocket_send(websocket,"\nSending test request...")
         
         # Test request
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=Azure_OpenAI_Model,
             messages=[
                 {"role": "user", "content": "Hello! Please respond with 'Connection successful' to confirm."}
             ],
-            max_tokens=50
+            #max_tokens=50
         )
         
         test_response = response.choices[0].message.content
         
-        websocket_send(websocket,f"\n✅ Connection successful!")
-        websocket_send(websocket,f"\nResponse: {test_response}")
-        websocket_send(websocket,f"\nUsage:")
-        websocket_send(websocket,f"   • Prompt tokens: {response.usage.prompt_tokens}")
-        websocket_send(websocket,f"   • Completion tokens: {response.usage.completion_tokens}")
-        websocket_send(websocket,f"   • Total tokens: {response.usage.total_tokens}")
+        await websocket_send(websocket,f"\n✅ Connection successful!")
+        await websocket_send(websocket,f"\nResponse: {test_response}")
+        await websocket_send(websocket,f"\nUsage:")
+        await websocket_send(websocket,f"   • Prompt tokens: {response.usage.prompt_tokens}")
+        await websocket_send(websocket,f"   • Completion tokens: {response.usage.completion_tokens}")
+        await websocket_send(websocket,f"   • Total tokens: {response.usage.total_tokens}")
         
         return True
         
     except Exception as e:
-        websocket_send(websocket,f"\n❌ Connection failed: {str(e)}")
-        websocket_send(websocket,f"\n🔍 Troubleshooting:")
-        websocket_send(websocket,"   1. Verify AZURE_OPENAI_ENDPOINT is correct")
-        websocket_send(websocket,"   2. Ensure AZURE_OPENAI_KEY is valid")
-        websocket_send(websocket,"   3. Check AZURE_OPENAI_MODEL deployment exists")
-        websocket_send(websocket,"   4. Verify APIM subscription and routing")
-        websocket_send(websocket,"   5. Check network connectivity to APIM")
+        print(e)
+        await websocket_send(websocket,f"\n❌ Connection failed: {str(e)}")
+        await websocket_send(websocket,f"\n🔍 Troubleshooting:")
+        await websocket_send(websocket,"   1. Verify AZURE_OPENAI_ENDPOINT is correct")
+        await websocket_send(websocket,"   2. Ensure AZURE_OPENAI_KEY is valid")
+        await websocket_send(websocket,"   3. Check AZURE_OPENAI_MODEL deployment exists")
+        await websocket_send(websocket,"   4. Verify APIM subscription and routing")
+        await websocket_send(websocket,"   5. Check network connectivity to APIM")
         return False
 
 # ============================================================================
 # RED TEAM HANDLER CONFIGURATION
 # ============================================================================
 
-async def azure_openai_handler(prompt: str, history: list, session_id: str, target_system_prompt: str, websocket: WebSocket, Azure_OpenAI_Endpoint: str, Azure_OpenAI_Model: str, Azure_OpenAI_KEY: str, Azure_OpenAI_API_VERSION: str = "2025-01-01-preview") -> str:
+async def azure_openai_handler(prompt: str, history: list, session_id: str, target_system_prompt: str, websocket: WebSocket, Azure_OpenAI_Endpoint: str, Azure_OpenAI_Model: str, Azure_OpenAI_KEY: str) -> str:
     """
     Handler that forwards HiddenLayer attack prompts to Azure OpenAI via APIM.
     
@@ -268,47 +304,79 @@ async def azure_openai_handler(prompt: str, history: list, session_id: str, targ
         history: Conversation history (previous turns)
         session_id: Unique session identifier
         target_system_prompt: System prompt for the target
+        websocket: Websocket connection for status updates
+        Azure_OpenAI_Endpoint: Base URL for Azure OpenAI
+        Azure_OpenAI_Model: Model name to target
+        Azure_OpenAI_KEY: API Key for Azure OpenAI
     
     Returns:
         str: Response from Azure OpenAI model
     """
-    
+
     # Initialize Azure OpenAI client with proper configuration
-    client = AzureOpenAI(
+    from openai import AsyncAzureOpenAI
+
+    # Default to a recent API version if not provided elsewhere (could also be passed in extras if needed)
+    Azure_OpenAI_API_VERSION = "2025-04-01-preview"
+
+    client = AsyncAzureOpenAI(
         api_key=Azure_OpenAI_KEY,
         api_version=Azure_OpenAI_API_VERSION,
         azure_endpoint=Azure_OpenAI_Endpoint
     )
     
     # Build conversation messages
-    messages = [{"role": "system", "content": TARGET_SYSTEM_PROMPT}]
+
+    if target_system_prompt is None: 
+        target_system_prompt = "You are a helpful assistant."
+    if prompt is None:
+        print("330 prompt is None")
+    messages = [{"role": "system", "content": target_system_prompt}]
     messages.extend(history)  # Include conversation history for multi-turn attacks
     messages.append({"role": "user", "content": prompt})
     
+    # Known content filtering messages that indicate the model correctly refused
+    # These are considered successful defenses, not errors
+    CONTENT_FILTER_INDICATORS = [
+        "content management policy",
+        "content filtering",
+        "content_filter",
+        "ResponsibleAIPolicyViolation",
+        "The response was filtered",
+    ]
+    
     try:
         # Call Azure OpenAI via APIM
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=Azure_OpenAI_Model,
             messages=messages,
-            temperature=0.7,
-            max_tokens=1000,
+            #temperature=0.7,
+            # max_tokens=1000,
         )
         
         target_response = response.choices[0].message.content
         
         # Progress indicator
-        #websocket_send(websocket,".")
+        #await websocket_send(websocket,".")
         
         return target_response
         
-    except BadRequestError as e:
-        # Handle content filtering or other Azure-specific errors
-        websocket_send(websocket,f"\n⚠️  [{session_id[:8]}] Azure error: {e.message[:100]}")
-        return e.message
-        
     except Exception as e:
+        error_message = str(e)
+        
+        # Check if this is a content filtering "error" - which is actually a successful defense
+        is_content_filter = any(indicator.lower() in error_message.lower() for indicator in CONTENT_FILTER_INDICATORS)
+        
+        if is_content_filter:
+            # Content filtering triggered - this is a PASS for red team testing
+            # The model correctly refused to respond to a potentially harmful prompt
+            await websocket_send(websocket, f"\n🛡️  [{session_id[:8]}] Content filter triggered (defense successful)")
+            # Return the error message as the response - HiddenLayer will see this as a refusal
+            return f"[CONTENT_FILTER_BLOCKED] {error_message}"
+        
         # Handle other errors gracefully
-        websocket_send(websocket,f"\n❌ [{session_id[:8]}] Error: {str(e)[:100]}")
+        print(e)
+        await websocket_send(websocket,f"\n❌ [{session_id[:8]}] Error:: {str(e)[:100]}")
         return "I encountered an error processing your request."
 
 
@@ -322,46 +390,47 @@ async def run_hiddenlayer_tests(base_url: str, api_key: str, hiddenlayer_client_
     failed = 0
 
     # Check OpenAI connection
-    connection_ok = await test_azure_openai_connection(websocket)
+    connection_ok = await test_azure_openai_connection(websocket,base_url,model_name,api_key)
 
     if connection_ok:
-        websocket_send(websocket,f"\n================================================")
-        websocket_send(websocket,"Ready to run Red Team evaluation using HiddenLayer's SDK!")
-        websocket_send(websocket,f"================================================")
+        await websocket_send(websocket,f"\n================================================")
+        await websocket_send(websocket,"Ready to run Red Team evaluation using HiddenLayer's SDK!")
+        await websocket_send(websocket,f"================================================")
     else:
-        websocket_send(websocket,f"\n❌ Cannot proceed with HiddenLayer tests due to connection failure of the Azure OpenAI service.")
+        await websocket_send(websocket,f"\n❌ Cannot proceed with HiddenLayer tests due to connection failure of the Azure OpenAI service.")
         failed += 1
         return passed, failed 
 
     # Evaluation name (appears in HiddenLayer console)
     EVALUATION_NAME = "JM Demo - Azure OpenAI Red Team via APIM"
-    await websocket.send_json({"type": "error", "message": f"\n📝 Target System Prompt:"})
-    await websocket.send_json({"type": "error", "message": f" {TARGET_SYSTEM_PROMPT[:150]}..."})
-    await websocket.send_json({"type": "error", "message": f"\n🏷️  Evaluation Name: {EVALUATION_NAME}"})
+    await websocket.send_json({"type": "log", "message": f"\n📝 Target System Prompt:"})
+    #await websocket.send_json({"type": "error", "message": f" {target_system_prompt[:150]}..."})
+    await websocket.send_json({"type": "log", "message": f"\n🏷️  Evaluation Name: {EVALUATION_NAME}"})
  
     # Run the evaluation
-    websocket_send(websocket,f"\n================================================")
-    websocket_send(websocket,f"🚀 STARTING RED TEAM SECURITY EVALUATION")
-    websocket_send(websocket,f"================================================")
-    websocket_send(websocket,f"📝 Evaluation Name: {EVALUATION_NAME}")
-    websocket_send(websocket,f"🎯 Target: Azure OpenAI via APIM")
-    evaluation_results = await run_red_team_evaluation(websocket,hiddenlayer_client_id, hiddenlayer_client_secret, model_name, passed, failed)
+    await websocket_send(websocket,f"\n================================================")
+    await websocket_send(websocket,f"🚀 STARTING RED TEAM SECURITY EVALUATION")
+    await websocket_send(websocket,f"================================================")
+    await websocket_send(websocket,f"📝 Evaluation Name: {EVALUATION_NAME}")
+    await websocket_send(websocket,f"🎯 Target: Azure OpenAI via APIM")
+    base_url = base_url.replace("/models","")  # Remove /models suffix if present
+    evaluation_results = await run_red_team_evaluation(websocket,hiddenlayer_client_id, hiddenlayer_client_secret, base_url,api_key, model_name, passed, failed)
 
     # Store session ID for reference
     if evaluation_results["success"]:
         SESSION_ID = evaluation_results["session_id"]
-        websocket_send(websocket,f"\n================================================")
-        websocket_send(websocket,f"✅ SESSION COMPLETE")
-        websocket_send(websocket,f"================================================")
-        websocket_send(websocket,f"🆔 Session ID saved to variable: SESSION_ID = '{SESSION_ID}'")
-        websocket_send(websocket,f"\n📊 Next Steps:")
-        websocket_send(websocket,f"   1. View results at: https://console.hiddenlayer.ai/")
-        websocket_send(websocket,f"   2. Review discovered vulnerabilities and attack transcripts")
-        websocket_send(websocket,f"   3. Implement recommended security improvements")
-        websocket_send(websocket,f"   4. Re-run evaluation to verify fixes")
-        websocket_send(websocket,f"================================================")
+        await websocket_send(websocket,f"\n================================================")
+        await websocket_send(websocket,f"✅ SESSION COMPLETE")
+        await websocket_send(websocket,f"================================================")
+        await websocket_send(websocket,f"🆔 Session ID saved to variable: SESSION_ID = '{SESSION_ID}'")
+        await websocket_send(websocket,f"\n📊 Next Steps:")
+        await websocket_send(websocket,f"   1. View results at: https://console.hiddenlayer.ai/")
+        await websocket_send(websocket,f"   2. Review discovered vulnerabilities and attack transcripts")
+        await websocket_send(websocket,f"   3. Implement recommended security improvements")
+        await websocket_send(websocket,f"   4. Re-run evaluation to verify fixes")
+        await websocket_send(websocket,f"================================================")
     else: 
-        websocket_send(websocket,f"\n❌ Evaluation did not complete successfully.")
+        await websocket_send(websocket,f"\n❌ Evaluation did not complete successfully.")
         
     passed += evaluation_results.get("passed", 0)
     failed += evaluation_results.get("failed", 0)
@@ -416,6 +485,8 @@ async def run_pyrit_tests(base_url: str, api_key: str, model: str, websocket: We
                 await websocket.send_json({"type": "log", "message": f"\n📝 Prompt {i}/{len(test_prompts)}: {prompt}"})
                 
                 # Send the prompt to the LLM
+                if prompt is None:
+                    print("330 prompt is None")
                 response = await client.chat.completions.create(
                     model=model,
                     messages=[{"role": "user", "content": prompt}],
@@ -427,6 +498,7 @@ async def run_pyrit_tests(base_url: str, api_key: str, model: str, websocket: We
                 passed += 1
                 
             except Exception as e:
+                print(e)
                 error_msg = str(e)
                 await websocket.send_json({"type": "log", "message": f"❌ Prompt {i} failed: {error_msg}"})
                 if "404" in error_msg:
@@ -437,9 +509,11 @@ async def run_pyrit_tests(base_url: str, api_key: str, model: str, websocket: We
         await websocket.send_json({"type": "log", "message": f"\n✅ PyRIT-style testing complete: {passed} passed, {failed} failed"})
 
     except ImportError:
+        print(e)
         await websocket.send_json({"type": "log", "message": "Error: OpenAI library not installed or accessible."})
         failed += 1
     except Exception as e:
+        print(e)
         error_msg = str(e)
         await websocket.send_json({"type": "log", "message": f"PyRIT Test encountered an issue: {error_msg}"})
         if "404" in error_msg:
@@ -464,7 +538,7 @@ async def websocket_endpoint(websocket: WebSocket):
         hiddenlayer_client_secret = config.get("HIDDENLAYER_CLIENT_SECRET")
 
         if not api_key:
-            await websocket.send_json({"type": "error", "message": "Missing API Key"})
+            await websocket.send_json({"type": "log", "message": "Missing API Key"})
             return
         
         # Normalize the base URL based on provider
