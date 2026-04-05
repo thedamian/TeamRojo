@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   # Optionally trigger after deployment workflows:
   # workflow_run:
-  #   workflows: ["Build & Deploy Web App"]
+  #   workflows: ["Test LLM Endpoints"]
   #   types: [completed]
 
 permissions:
@@ -41,13 +41,13 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        working-directory: tests/ai_redteam
+        working-directory: tests
         run: uv sync
 
       - name: Run AI Red Team Tests
-        working-directory: tests/ai_redteam
+        working-directory: tests
         run: |
-          uv run python test_ai_redteam.py 2>&1 | tee test_output.log
+          uv run python teamRojoGithubAction.py 2>&1 | tee test_output.log
 
           # Capture the exit code from the script (via PIPESTATUS)
           EXIT_CODE=${PIPESTATUS[0]}
@@ -60,13 +60,13 @@ jobs:
         with:
           name: ai-redteam-report
           path: |
-            tests/ai_redteam/redteam_report.json
-            tests/ai_redteam/test_output.log
+            tests/redteam_report.json
+            tests/test_output.log
           retention-days: 30
 
       - name: Report Summary
         if: always()
-        working-directory: tests/ai_redteam
+        working-directory: tests
         run: |
           echo "## 🛡️ AI Red Team Test Results" >> $GITHUB_STEP_SUMMARY
 
